@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.design.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <TableRow
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <android.support.v7.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/colorPrimary"
+                android:minHeight="?attr/actionBarSize"
+                android:theme="?attr/actionBarTheme" />
+        </TableRow>
+
+        <TableRow
+            android:layout_width="match_parent"
+            android:layout_height="46dp" >
+
+            <Space
+                android:layout_width="31dp"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/textView"
+                android:layout_width="95dp"
+                android:layout_height="wrap_content"
+                android:text="Server:"
+                tools:text="Server:" />
+
+            <EditText
+                android:id="@+id/editTextServer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="text|textPersonName"
+                android:text="101.132.98.137" />
+        </TableRow>
+
+        <TableRow
+            android:layout_width="match_parent"
+            android:layout_height="44dp" >
+
+            <Space
+                android:layout_width="30dp"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/textView2"
+                android:layout_width="97dp"
+                android:layout_height="wrap_content"
+                android:text="Rttp Port：" />
+
+            <EditText
+                android:id="@+id/editTextRTTPPort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="number"
+                android:text="58888" />
+        </TableRow>
+
+        <TableRow
+            android:layout_width="match_parent"
+            android:layout_height="42dp" >
+
+            <Space
+                android:layout_width="30dp"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/textView3"
+                android:layout_width="97dp"
+                android:layout_height="wrap_content"
+                android:text="TCP Port:" />
+
+            <EditText
+                android:id="@+id/editTextTCPPort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="number"
+                android:text="58889" />
+        </TableRow>
+
+        <TableRow
+            android:layout_width="match_parent"
+            android:layout_height="50dp" >
+
+            <Space
+                android:layout_width="28dp"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/textView4"
+                android:layout_width="99dp"
+                android:layout_height="32dp"
+                android:text="Tcp Latency:" />
+
+            <EditText
+                android:id="@+id/editTextTcpLatency"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="text|textPersonName"
+                android:text="0ms" />
+
+        </TableRow>
+
+        <TableRow
+            android:layout_width="match_parent"
+            android:layout_height="47dp" >
+
+            <Space
+                android:layout_width="30dp"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/textView5"
+                android:layout_width="97dp"
+                android:layout_height="30dp"
+                android:text="Rttp Latency:" />
+
+            <EditText
+                android:id="@+id/editTextRttpLatency"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ems="10"
+                android:inputType="text|textPersonName"
+                android:text="0ms" />
+
+        </TableRow>
+
+        <TableRow
+            android:id="@+id/tableRowBottom"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <android.support.constraint.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="99dp">
+
+                <Button
+                    android:id="@+id/buttonStart"
+                    android:layout_width="180dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginLeft="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_marginRight="8dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="Start"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@+id/buttonStop"
+                    app:layout_constraintStart_toStartOf="parent" />
+
+                <Button
+                    android:id="@+id/buttonStop"
+                    android:layout_width="180dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:layout_marginRight="8dp"
+                    android:text="Stop"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="@+id/buttonStart" />
+            </android.support.constraint.ConstraintLayout>
+        </TableRow>
+
+    </LinearLayout>
+
+</android.support.design.widget.CoordinatorLayout>
