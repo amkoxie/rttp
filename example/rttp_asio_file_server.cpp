@@ -64,6 +64,11 @@ void download_file_client::close()
 		file_server_.async_close_file(shared_from_this(), handle_ptr_);
 		handle_ptr_.reset();
 	}
+    
+    if (rttp_socket_ != 0) {
+        rt_close(rttp_socket_);
+        rttp_socket_ = 0;
+    }
 }
 
 void download_file_client::handle_read_file_complete(char* buffer, int bytes)
@@ -73,11 +78,10 @@ void download_file_client::handle_read_file_complete(char* buffer, int bytes)
 	if (bytes > 0) {
 		send_deq.push_back(std::shared_ptr<socket_send_item>(new socket_send_item(buffer, bytes)));
 		int ret = rtsocket_send_data(rttp_socket_, *this);
-		sent_size_ += ret;
-
+		
 		cur_file_pos_ += bytes;
 
-		if (sent_size_ > 0 && sent_size_ == file_size_) {
+		if (file_size_ > 0 && cur_file_pos_ == file_size_ && send_deq.size() == 0) {
 			//send file completed
 			rttp_server_.client_factory_.close_client(shared_from_this());
 		}
@@ -115,7 +119,18 @@ void download_file_client::handle_open_file_complete(boost::shared_ptr<async_fil
 		async_read_file();
 	}
 	else {
-		rttp_server_.client_factory_.close_client(download_file_client::shared_from_this());
+        char *resp_head = new char[256];
+        std::strstream resp_stream(resp_head, 256);
+        resp_stream << "ERROR open_file_failed"<< endl;
+        
+        send_deq.push_back(std::shared_ptr<socket_send_item>(new socket_send_item(resp_head, resp_stream.pcount())));
+        
+        state = socket_io_info::WAITING_CLOSE;
+        
+        rtsocket_send_data(rttp_socket_, *this);
+        if (send_deq.size() == 0) {
+            rttp_server_.client_factory_.close_client(shared_from_this());
+        }
 	}
 }
 
@@ -415,12 +430,14 @@ void on_rtsocket_write(RTSOCKET socket)
 	socket_io_info &si = *client_ptr;
 
 	int ret = rtsocket_send_data(socket, si);
+    
+    if (si.state == socket_io_info::WAITING_CLOSE && si.send_deq.size() == 0) {
+        server_ptr->client_factory_.close_client(client_ptr);
+        return;
+    }
 
-	client_ptr->sent_size_ += ret;
-
-	if (client_ptr->sent_size_ > 0 && client_ptr->sent_size_ == client_ptr->file_size_) {
+	if (client_ptr->file_size_ > 0 && client_ptr->cur_file_pos_ == client_ptr->file_size_ && client_ptr->send_deq.size() == 0) {
 		//send file completed
-		rt_close(socket);
 		server_ptr->client_factory_.close_client(client_ptr);
 	}
 	else {
@@ -487,13 +504,14 @@ void on_rtsocket_read(RTSOCKET socket)
 			si.send_deq.push_back(ptr);
 
 			rtsocket_send_data(socket, si);
-
+            if (si.send_deq.size() == 0) {
+                server_ptr->client_factory_.close_client(client_ptr);
+            }
 		}
 		else if (ret == -1) {
 
 		}
 		else {
-			rt_close(socket);
 			server_ptr->client_factory_.close_client(client_ptr);
 			cout << "recv request error: " << ret << endl;
 		}
@@ -518,7 +536,6 @@ void on_rtsocket_error(RTSOCKET socket)
 	int errcode = rt_get_error(socket);
 	cout << "socket " << socket << " error " << errcode << endl;
 
-	rt_close(socket);
 	server_ptr->client_factory_.close_client(client_ptr);
 }
 

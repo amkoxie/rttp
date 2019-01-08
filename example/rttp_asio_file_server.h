@@ -141,7 +141,7 @@ public:
 	boost::shared_ptr<async_file_handle> handle_ptr_;
 
 	uint64_t file_size_ = 0;
-	uint64_t sent_size_ = 0;
+	//uint64_t sent_size_ = 0;
 	asio::io_service& io_context_;
 	RTSOCKET rttp_socket_;
 
