@@ -1,7 +1,6 @@
 RTTP - A Reliable Realtime Transport Protocol
 ==================================================
 
-# RTTP:
 RTTP is a reliable UDP based application level data transport protocol designed for time critical applications which require timely delivery of information, such as  online game, live streaming, financial order routing, long distance data synchronization, etc.   It’s purpose is to provide a simple and robust network communication layer on top of  UDP (not limited to UDP). The functions it provides is same with TCP but with better performance on latency and speed.
 
 # Features:
@@ -64,4 +63,4 @@ Commercial use please contact us.
 
 # Contact:
 Mail: support@rtttech.com
-QQ Group: 
+QQ Group: 645284582
