@@ -38,12 +38,12 @@ public class ServerComm : MonoBehaviour {
         network_comm.Initialize();
     }
 
-    public void ConnectToServer()
+    public void ConnectToServer(string strServer, int port)
     {
         if (conn_state == ConnState.CONNECTING || conn_state == ConnState.CONNECTED)
             return;
 
-        network_comm.ConnectServer();
+        network_comm.ConnectServer(strServer, port);
 
         conn_state = ConnState.CONNECTING;
 

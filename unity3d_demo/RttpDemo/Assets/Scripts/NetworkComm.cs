@@ -21,15 +21,11 @@ public class Utility
 
 public class NetworkComm : MonoBehaviour
 {
-    public const string SERVER_IP = "101.132.98.137";
-
-    //public const string SERVER_IP = "127.0.0.1";
-
     public static NetworkComm s_instance = null;
     private static Thread s_thread = null;
     private static Queue<byte[]> s_udp_send_queue = new Queue<byte[]>();
     private static UdpClient s_udp_socket = new UdpClient();
-    private static IPEndPoint s_server_addr = new IPEndPoint(IPAddress.Parse(SERVER_IP), 58888);
+    private static IPEndPoint s_server_addr = null;
     private static bool s_udp_sending = false;
     private static RTSOCKET s_rtsocket = (RTSOCKET)0;
     private static string s_status = "idle";
@@ -346,13 +342,13 @@ public class NetworkComm : MonoBehaviour
         Debug.Log("set callback success");
     }
 
-    public void ConnectServer()
+    public void ConnectServer(string strServer, int port)
     {
-        Action act = new Action(() => this.DoConnectServer());
+        Action act = new Action(() => this.DoConnectServer(strServer, port));
         PostThreadMessage(Command.CONNECT, act);
     }
 
-    public void DoConnectServer()
+    public void DoConnectServer(string strServer, int port)
     {
         Debug.Assert(Thread.CurrentThread.ManagedThreadId == s_thread.ManagedThreadId);
 
@@ -360,6 +356,8 @@ public class NetworkComm : MonoBehaviour
         {
             rttp.rt_close(s_rtsocket);
         }
+
+        s_server_addr = new IPEndPoint(IPAddress.Parse(strServer), port);
 
         s_rtsocket = rttp.rt_socket(0);
         if (s_rtsocket != (RTSOCKET)0)

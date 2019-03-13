@@ -12,6 +12,10 @@ public class UIScript : MonoBehaviour {
     public Text attack_txt;
 
     private string attack_msg = "";
+
+    private string SERVER_IP = "101.132.98.137";
+    private int PORT = 58888;
+
     // Use this for initialization
     void Start () {
         //GameObject attack_btn = GameObject.Find("ButtonAttack");
@@ -76,7 +80,7 @@ public class UIScript : MonoBehaviour {
     {
         Debug.Log("connect clicked");
 
-        srv_comm.ConnectToServer();
+        srv_comm.ConnectToServer(SERVER_IP, PORT);
         
     }
 
