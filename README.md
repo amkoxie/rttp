@@ -59,7 +59,7 @@ run build_posix.sh
 # License:
 Non-commercial use is free. 
 
-Commercial use please contact us. 
+Commercial use(full source code) please contact us. 
 
 # Contact:
 Mail: support@rtttech.com
