@@ -82,7 +82,7 @@ public:
 	const std::string& work_path() const { return work_path_; }
 	//uint64_t get_file_size(const std::string& file);
 
-	void async_open_file(boost::shared_ptr<async_file_operator> initiator, const std::string& path_file);
+	void async_open_file(boost::shared_ptr<async_file_operator> initiator, const std::string& path_file, uint64_t offset = 0);
 	void async_read_file(boost::shared_ptr<async_file_operator> initiator, boost::shared_ptr<async_file_handle> handle_ptr, uint64_t offset, char* buffer, int size);
 	void async_close_file(boost::shared_ptr<async_file_operator> initiator, boost::shared_ptr<async_file_handle> handle_ptr);
 
@@ -92,7 +92,7 @@ private:
 private:
 	struct async_file_op
 	{
-		enum op_cmd { OPC_OPEN, OPC_READ, OPC_EXIT };
+		enum op_cmd { OPC_OPEN, OPC_READ, OPC_CLOSE, OPC_EXIT };
 		boost::shared_ptr<async_file_operator> initiator;
 		boost::shared_ptr<async_file_handle> handle_ptr;
 		int cmd;
@@ -135,7 +135,8 @@ public:
 	virtual void handle_read_file_complete(char* buffer, int size);
 	
 public:
-	std::string request_line_;
+	std::string request_lines_;
+	uint64_t req_file_pos_ = 0;
 	uint64_t cur_file_pos_ = 0;
 	bool reading_file_ = false;
 	boost::shared_ptr<async_file_handle> handle_ptr_;

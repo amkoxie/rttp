@@ -1,5 +1,6 @@
 #include "rtsocket.h"
 #include "os_common.h"
+#include "http.h"
 #include "rttp_asio_file_server.h"
 #include <thread>
 #include <stdio.h>
@@ -32,7 +33,7 @@ int rtsocket_send_data(RTSOCKET socket, socket_io_info& si)
 
 
 download_file_client::download_file_client(asio::io_service& io_ctx, boost_rttp_server& server, async_file_server& file_server, RTSOCKET socket)
-	: io_context_(io_ctx), rttp_socket_(socket), rttp_server_(server), file_server_(file_server)
+	: io_context_(io_ctx), rttp_socket_(socket), rttp_server_(server), file_server_(file_server), req_file_pos_(0), cur_file_pos_(0)
 {
 
 }
@@ -108,9 +109,19 @@ void download_file_client::handle_open_file_complete(boost::shared_ptr<async_fil
 
 		file_size_ = handle_ptr->size;
 
-		char *resp_head = new char[128];
-		std::strstream resp_stream(resp_head, 128);
-		resp_stream << "OK " << file_size_ << endl;
+		char *resp_head = new char[1024];
+		std::strstream resp_stream(resp_head, 1024);
+
+		if (req_file_pos_ == 0) {
+			resp_stream << "HTTP/1.1 200 OK\r\n";
+		}
+		else {
+			resp_stream << "HTTP/1.1 206 Partial Content\r\n";
+			resp_stream << "Content-Range: bytes " << req_file_pos_ << "-" << file_size_-1 << "/" << file_size_ << "\r\n";
+		}
+		resp_stream << "Content-Length: " << file_size_ << "\r\n";
+		resp_stream << "Server: http-utp server\r\n";
+		resp_stream << "\r\n";
 
 		send_deq.push_back(std::shared_ptr<socket_send_item>(new socket_send_item(resp_head, resp_stream.pcount())));
 
@@ -121,7 +132,7 @@ void download_file_client::handle_open_file_complete(boost::shared_ptr<async_fil
 	else {
         char *resp_head = new char[256];
         std::strstream resp_stream(resp_head, 256);
-        resp_stream << "ERROR open_file_failed"<< endl;
+        resp_stream << "HTTP/1.1 404 ERROR open_file_failed\r\n\r\n"<< endl;
         
         send_deq.push_back(std::shared_ptr<socket_send_item>(new socket_send_item(resp_head, resp_stream.pcount())));
         
@@ -169,12 +180,13 @@ void async_file_server::stop()
 	work_thread_ptr_.reset();
 }
 
-void async_file_server::async_open_file(boost::shared_ptr<async_file_operator> initiator, const std::string& path_file)
+void async_file_server::async_open_file(boost::shared_ptr<async_file_operator> initiator, const std::string& path_file, uint64_t offset)
 {
 	boost::shared_ptr<async_file_op> op_ptr(new async_file_op());
 	op_ptr->cmd = async_file_op::OPC_OPEN;
 	op_ptr->initiator = initiator;
 	op_ptr->file = path_file;
+	op_ptr->offset = offset;
 
 	file_op_queue_.push(op_ptr);
 }
@@ -194,11 +206,13 @@ void async_file_server::async_read_file(boost::shared_ptr<async_file_operator> i
 
 void async_file_server::async_close_file(boost::shared_ptr<async_file_operator> initiator, boost::shared_ptr<async_file_handle> handle_ptr)
 {
-	handle_ptr->operators.erase(initiator);
-	if (handle_ptr->operators.size() == 0) {
-		fclose(handle_ptr->fp);
-		handle_ptr->fp = NULL;
-	}
+	boost::shared_ptr<async_file_op> op_ptr(new async_file_op());
+	op_ptr->cmd = async_file_op::OPC_CLOSE;
+	op_ptr->initiator = initiator;
+	op_ptr->handle_ptr = handle_ptr;
+
+	file_op_queue_.push(op_ptr);
+
 }
 
 int async_file_server::file_access_thread_proc(void* param)
@@ -260,6 +274,13 @@ int async_file_server::file_access_thread_proc(void* param)
 					this_ptr->io_context_.post(boost::bind(&async_file_operator::handle_open_file_complete, op_ptr->initiator, handle_ptr, 0));
 				}
 			
+			}
+			else if (op_ptr->cmd == async_file_op::OPC_CLOSE) {
+				op_ptr->handle_ptr->operators.erase(op_ptr->initiator);
+				if (op_ptr->handle_ptr->operators.size() == 0) {
+					fclose(op_ptr->handle_ptr->fp);
+					op_ptr->handle_ptr->fp = NULL;
+				}
 			}
 			else if (op_ptr->cmd == async_file_op::OPC_EXIT) {
 				break;
@@ -330,9 +351,11 @@ void boost_rttp_server::do_receive()
 
 				int mode = RTSM_HIGH_THROUGHPUT;
 				rt_setsockopt(socket, RTSO_MODE, (char*)&mode, sizeof(mode));
-
 				client_factory_.create_client(socket, *this);
 			}
+		}
+		else {
+			std::cout << "receive failed" << ec << endl;
 		}
 
 		if (server_ctx_.run)
@@ -352,8 +375,11 @@ void boost_rttp_server::do_send()
 	udp::endpoint remote_endpoint;
 	memcpy(remote_endpoint.data(), (void*)&server_ctx_.udp_send_deq[0]->addr, server_ctx_.udp_send_deq[0]->addr_len);
 	socket_.async_send_to(asio::buffer(server_ctx_.udp_send_deq[0]->buffer, server_ctx_.udp_send_deq[0]->len), sender_endpoint_,
-		[this](system::error_code /*ec*/, std::size_t /*bytes_sent*/)
+		[this](system::error_code ec, std::size_t bytes_sent)
 	{
+		if (ec)
+			std::cout << "send failed" << ec << endl;
+
 		sending_ = false;
 		server_ctx_.udp_send_deq.pop_front();
 
@@ -473,47 +499,83 @@ void on_rtsocket_read(RTSOCKET socket)
 	boost::shared_ptr<download_file_client> client_ptr = boost::static_pointer_cast<download_file_client>(server_ptr->client_factory_.get_client(socket));
 	socket_io_info& si = *client_ptr;
 
-	if (client_ptr->request_line_.size() == 0) {
-		if (si.recv_buffer == NULL) {
-			si.recv_buff_len = 256;
-			si.recv_buffer = new char[si.recv_buff_len];
-		}
+	if (si.recv_buffer == NULL) {
+		si.recv_buff_pos = 0;
+		si.recv_buff_len = 4096;
+		si.recv_buffer = new char[si.recv_buff_len];
+	}
+
+
+	while (true) {
 		int ret = recv_request_line(socket, si);
 
 		if (ret > 0) {
 			//receive request line success
-			client_ptr->request_line_.assign(si.recv_buffer, si.recv_buff_pos);
-			std::vector<std::string> req_vec;
-			split_string(client_ptr->request_line_, std::back_inserter(req_vec));
-			client_ptr->request_line_.assign(si.recv_buffer, si.recv_buff_pos);
+			std::string line(si.recv_buffer, si.recv_buff_pos);
+			client_ptr->request_lines_ += line;
 
-			char *resp_head = new char[128];
-			std::strstream resp_stream(resp_head, 128);
-			if (req_vec.size() >= 2 && req_vec[0] == "GET") {
-				std::string path_file = (filesystem::path(client_ptr->file_server_.work_path()) / filesystem::path(req_vec[1])).string();
-				client_ptr->file_server_.async_open_file(client_ptr, path_file);
-				delete[] resp_head;
-				return;
+			si.recv_buff_pos = 0;
+
+			bool error_occur = false;
+			std::string error_msg = "";
+
+			if (line == "\n" || line == "\r\n") {
+				HttpRequest req;
+				if (req.Decode(client_ptr->request_lines_.c_str(), client_ptr->request_lines_.size())) {
+					std::string path_file = (filesystem::path(client_ptr->file_server_.work_path()) / filesystem::path(req.GetReqPathFile())).string();
+
+					int64_t offset = 0;
+					int64_t end = 0;
+					std::string range = req.GetHttpRequestField("Range");
+
+					if (range.size() > 0) {
+						if (!Http::DecodeHttpRequestRangeLine(range, offset, end)) {
+							error_occur = true;
+							error_msg = "invalid http range request\n";
+						}
+					}
+
+					if (!error_occur) {
+						client_ptr->req_file_pos_ = offset;
+						client_ptr->cur_file_pos_ = offset;
+						client_ptr->file_server_.async_open_file(client_ptr, path_file, offset);
+					}
+				}
+				else {
+					error_occur = true;
+					error_msg = "invalid request";
+				}
+
 			}
 			else {
-				resp_stream << "ERROR invalid_request" << std::endl;
-				si.state = socket_io_info::WAITING_CLOSE;
+				continue;//
 			}
 
-			std::shared_ptr<socket_send_item> ptr(new socket_send_item(resp_head, resp_stream.pcount()));
-			si.send_deq.push_back(ptr);
+			if (error_occur) {
+				char *resp_head = new char[1024];
+				std::strstream resp_stream(resp_head, 1024);
 
-			rtsocket_send_data(socket, si);
-            if (si.send_deq.size() == 0) {
-                server_ptr->client_factory_.close_client(client_ptr);
-            }
+				resp_stream << "HTTP/1.1 400 ERROR" + error_msg + "\r\n\r\n" << std::endl;
+				si.state = socket_io_info::WAITING_CLOSE;
+
+				std::shared_ptr<socket_send_item> ptr(new socket_send_item(resp_head, resp_stream.pcount()));
+				si.send_deq.push_back(ptr);
+
+				rtsocket_send_data(socket, si);
+				if (si.send_deq.size() == 0) {
+					server_ptr->client_factory_.close_client(client_ptr);
+				}
+				break;
+			}
+
 		}
 		else if (ret == -1) {
-
+			break;
 		}
 		else {
 			server_ptr->client_factory_.close_client(client_ptr);
 			cout << "recv request error: " << ret << endl;
+			break;
 		}
 	}
 }
@@ -607,8 +669,8 @@ int main(int argc, char* argv[])
 		std::thread t(main_func, &io_context);
 
 		while (server.server_ctx_.run) {
-			if (server.server_ctx_.state[0] != 0)
-				cout << server.server_ctx_.state << endl;
+			/*if (server.server_ctx_.state[0] != 0)
+				cout << server.server_ctx_.state << endl;*/
 			this_thread::sleep_for(chrono::milliseconds(500));
 		}
 

@@ -80,7 +80,6 @@ extern "C"
 	RTEXPORT void* rt_get_userdata(RTSOCKET s);
 	RTEXPORT void rt_set_userdata(RTSOCKET s, void *userdata);
 
-	RTEXPORT int rt_pump_packet(char* buffer, int len, RTSOCKET *sp);
 	RTEXPORT int rt_state_desc(RTSOCKET s, char * desc, int len);
 
 	RTEXPORT void rt_uninit();

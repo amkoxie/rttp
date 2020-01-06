@@ -23,7 +23,7 @@ Cross-Platform. Windows/Linux/Mac/IOS/Android.
 
 # Document:
 
-http://www.rtttech.com/rttp/doc/index.html
+http://www.rtttech.com/docs/rttp_api_doc
 
 # Getting Started
 

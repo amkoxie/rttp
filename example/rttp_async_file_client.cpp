@@ -1,5 +1,6 @@
-#include "../api/rtsocket.h"
+#include "rtsocket.h"
 #include "os_common.h"
+#include "http.h"
 
 #include <iostream>
 #include <deque>
@@ -33,6 +34,10 @@ struct rtsocket_client_context
 
 	std::string remote_file;
 	std::string local_file;
+
+	std::string response_line;
+	std::string remote_host;
+
 	FILE* fp;
 	uint64_t file_size = 0;
 	uint64_t downloaded_size = 0;
@@ -102,9 +107,11 @@ inline void on_rtsocket_connect(RTSOCKET socket)
 
 	rtsocket_client_context *ctx_ptr = (rtsocket_client_context*)rt_get_userdata(socket);
 
-	char *req_head = new char[256];
-	std::strstream resp_stream(req_head, 256);
-	resp_stream << "GET " << ctx_ptr->remote_file << endl;
+	char *req_head = new char[1024];
+	std::strstream resp_stream(req_head, 1024);
+	resp_stream << "GET " << ctx_ptr->remote_file << " HTTP/1.1\r\n";
+	resp_stream << "Host: " << ctx_ptr->remote_host << "\r\n";
+	resp_stream << "\r\n";
 	
 	ctx_ptr->rttp_socket_io_info.send_deq.push_back(std::shared_ptr<socket_send_item>(new socket_send_item(req_head, resp_stream.pcount())));
 
@@ -184,34 +191,35 @@ inline void on_rtsocket_read(RTSOCKET socket)
 		if (ctx_ptr->file_size == 0) {
 			//recv response head
 			if (ctx_ptr->rttp_socket_io_info.recv_buffer == NULL) {
-				si.recv_buff_len = 256;
+				si.recv_buff_len = 4096;
 				ctx_ptr->rttp_socket_io_info.recv_buffer = new char[si.recv_buff_len];
 			}
 
 			int ret = recv_response_line(socket, ctx_ptr->rttp_socket_io_info);
 			if (ret > 0) {
-				std::vector<std::string> resp_vec;
-				std::string resp = std::string(ctx_ptr->rttp_socket_io_info.recv_buffer, ctx_ptr->rttp_socket_io_info.recv_buff_pos);
-				split_string(resp, std::back_inserter(resp_vec));
-				cout << "get file response: " << resp << endl;
-				bool success = false;
-				if (resp_vec.size() >= 2) {
-					if (resp_vec[0] == "OK" && resp_vec[1].find_first_not_of("0123456789") == std::string::npos) {
-						success = true;
+				std::string line(si.recv_buffer, si.recv_buff_pos);
+				ctx_ptr->response_line += line;
+				si.recv_buff_pos = 0;
+
+				if (line == "\n" || line == "\r\n") {
+					HttpResponseHead resp;
+					bool success = resp.Decode(ctx_ptr->response_line.c_str(), ctx_ptr->response_line.size());
+					if (success && resp.GetStatusCode()/100 == 2 ) {
+						delete ctx_ptr->rttp_socket_io_info.recv_buffer;
+						ctx_ptr->rttp_socket_io_info.recv_buffer = NULL;
+						ctx_ptr->file_size = resp.GetContentSumSize();
+						ctx_ptr->write_file_thread = new std::thread(thread_write_file_proc, ctx_ptr, ctx_ptr->local_file);
+					}
+					else {
+						cout << "error: " << ctx_ptr->response_line << endl;
+						rt_close(ctx_ptr->rttp_socket);
+						ctx_ptr->rttp_socket = 0;
+						ctx_ptr->run = false;
+						return;
 					}
 				}
-
-				if (success) {
-					delete ctx_ptr->rttp_socket_io_info.recv_buffer;
-					ctx_ptr->rttp_socket_io_info.recv_buffer = NULL;
-					ctx_ptr->file_size = std::atoll(resp_vec[1].c_str());
-					ctx_ptr->write_file_thread = new std::thread(thread_write_file_proc, ctx_ptr, ctx_ptr->local_file);
-				}
 				else {
-					rt_close(ctx_ptr->rttp_socket);
-					ctx_ptr->rttp_socket = 0;
-					ctx_ptr->run = false;
-					return;
+					continue;
 				}
 			}
 			else if (ret == -1) {
@@ -219,7 +227,7 @@ inline void on_rtsocket_read(RTSOCKET socket)
 			}
 			else {
 				if (ret == 0) {
-					cout << "rttp connection closed by remote" << endl;
+					cout << "connection closed by remote" << endl;
 				}
 				else {
 					cout << "rt_recv return " << ret << endl;
@@ -264,7 +272,7 @@ inline void on_rtsocket_read(RTSOCKET socket)
 				}
 				else {
 					if (ret == 0) {
-						cout << "rttp connection closed by remote" << endl;
+						cout << "connection closed by remote" << endl;
 					}
 					else {
 						cout << "rt_recv return " << ret << endl;
@@ -398,6 +406,8 @@ inline int rttp_client_main_func(rtsocket_client_context* ctx_ptr, const char* r
 {
 	init_socket();
     
+	ctx_ptr->remote_host = remote_addr;
+
     int recv_buff_size = 4*1024*1024;
     
 	ctx_ptr->socket = create_udp_socket(recv_buff_size);
